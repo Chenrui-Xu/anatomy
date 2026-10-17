@@ -24,3 +24,7 @@ export function fixedScript() {
 export function glSharedScript() {
   return strip("gl-shared.mjs");
 }
+
+export function explainScript() {
+  return strip("explain.mjs");
+}

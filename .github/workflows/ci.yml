@@ -36,6 +36,8 @@ jobs:
         run: |
           node examples/dial-indicator/build.mjs
           node examples/dial-indicator/build.mjs --light
+          node examples/dial-indicator/build.mjs --explain
+          node examples/dial-indicator/build.mjs --explain --light
 
       - name: Desk computer
         run: |

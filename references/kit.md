@@ -126,6 +126,11 @@ Rotations about z can't be done with a screen transform: rebuild the rotating pa
 | `turnScript()` | From `scripts/inline-kit.mjs`. The 3D runtime (`TURN`, `TURN_CSS`) with `export` stripped, for a page with live parts: `script: turnScript() + glScript() + live`. Its internals are prefixed `t3`/`T3_`, so it inlines beside the kit and the WebGL layer. |
 | `ISO_CSS` | All the styles. `kit/iso.css` is the same text. |
 
+For optional prose that follows the model, `kit/explain.mjs` provides
+`explanationHtml`, `mountExplanation` and `EXPLANATION_CSS`. Include it with
+`explainScript()` from `scripts/inline-kit.mjs`; the default core is unchanged.
+See [`explanation.md`](explanation.md) for the snapshot and reference contract.
+
 ## 9. React components
 From `kit/react/draw.tsx`, which is server-safe:
 

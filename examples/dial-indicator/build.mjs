@@ -2,10 +2,13 @@ import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as k from "../../kit/iso-kit.mjs";
-import { kitScript } from "../../scripts/inline-kit.mjs";
+import { kitScript, explainScript } from "../../scripts/inline-kit.mjs";
+import { explanationHtml, EXPLANATION_CSS } from "../../kit/explain.mjs";
+import { describeDial } from "./explanation.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const theme = process.argv.includes("--light") ? "light" : "dark";
+const explained = process.argv.includes("--explain");
 
 const WIDTH = 600;
 const HEIGHT = 380;
@@ -173,10 +176,10 @@ const svg = k.figureSvg({
     plate(),
     rails(),
     fixture(),
-    `<g data-part="carriage" transform="${k.translateAlong(P, [startX, 0, 0])}">${carriage()}</g>`,
-    `<g data-part="plunger" transform="${k.translateAlong(P, [0, 0, CARRIAGE_TOP + BLOCKS[0]])}">${plunger()}</g>`,
+    `<g data-part="carriage"${explained ? ' data-explain-ref="carriage"' : ''} transform="${k.translateAlong(P, [startX, 0, 0])}">${carriage()}</g>`,
+    `<g data-part="plunger"${explained ? ' data-explain-ref="plunger"' : ''} transform="${k.translateAlong(P, [0, 0, CARRIAGE_TOP + BLOCKS[0]])}">${plunger()}</g>`,
     dial(),
-    `<path data-part="needle" class="iso-line" data-tone="lit" data-free="start" d="${needleAt(BLOCKS[0] / PER_TURN)}" style="stroke-width:1.1"/>`,
+    `<path data-part="needle"${explained ? ' data-explain-ref="needle"' : ''} class="iso-line" data-tone="lit" data-free="start" d="${needleAt(BLOCKS[0] / PER_TURN)}" style="stroke-width:1.1"/>`,
   ],
 });
 
@@ -192,7 +195,12 @@ const carriage = svg.querySelector('[data-part="carriage"]');
 const plunger = svg.querySelector('[data-part="plunger"]');
 const needle = svg.querySelector('[data-part="needle"]');
 const readout = document.querySelector("[data-readout]");
-const still = matchMedia("(prefers-reduced-motion: reduce)");
+const still = matchMedia("(prefers-reduced-motion: reduce)");${explained ? `
+const describeDial = ${describeDial.toString()};
+const figure = document.querySelector(".iso-figure");
+const explanation = mountExplanation(figure, describeDial);
+stage.removeAttribute("aria-disabled");
+const announcement = figure.querySelector("[data-explain-announcement]");` : ''}
 const stops = ${JSON.stringify(STOPS)};
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 const heightUnder = (cx) => {
@@ -206,7 +214,7 @@ const heightUnder = (cx) => {
 const blockUnder = (cx) => BLOCKS.findIndex((_, index) => { const from = cx - 24 + STEP * index; return DIAL[0] >= from && DIAL[0] <= from + BLOCK_W; });
 const needleAt = ${needleAt.toString().replace("k.lineOnTop", "lineOnTop")};
 let x = ${startX}, target = x, tip = { at: BASE + BLOCKS[0], rate: 0 };
-let frame = 0, last = 0, clock = 0, touring = true, visible = false, idleTimer = 0;
+let frame = 0, last = 0, clock = 0, touring = ${explained ? 'false' : 'true'}, visible = false, idleTimer = 0;
 const tourAt = (t) => stops[Math.floor(t / 2.2) % stops.length];
 function draw() {
   carriage.setAttribute("transform", translateAlong(P, [x, 0, 0]));
@@ -215,8 +223,14 @@ function draw() {
   const index = blockUnder(x);
   const text = (index < 0 ? "between blocks" : "block " + (index + 1)) + " · reads " + (tip.at - BASE).toFixed(1) + " px";
   if (readout.textContent !== text) readout.textContent = text;
-  stage.setAttribute("aria-valuenow", String(Math.round(tip.at - BASE)));
-  stage.setAttribute("aria-valuetext", text);
+${explained ? `  const settled = x === target && tip.rate === 0 && tip.at === heightUnder(x);
+  explanation.update({ index, reading: tip.at - BASE, settled, perTurn: PER_TURN });
+  if (settled) {
+    stage.setAttribute("aria-valuenow", String(Math.round(tip.at - BASE)));
+    if (stage.getAttribute("aria-valuetext") !== text) stage.setAttribute("aria-valuetext", text);
+    if (announcement.textContent !== text) announcement.textContent = text;
+  }` : `  stage.setAttribute("aria-valuenow", String(Math.round(tip.at - BASE)));
+  stage.setAttribute("aria-valuetext", text);`}
 }
 function tick(now) {
   const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
@@ -226,7 +240,7 @@ function tick(now) {
   x = calm ? target : x + (target - x) * (1 - Math.exp(-dt / 0.28));
   if (Math.abs(target - x) < 0.01) x = target;
   const want = heightUnder(x);
-  const stiff = 420, drag = calm ? 2 * Math.sqrt(420) : 26;
+${explained ? '  if (calm) { tip.at = want; tip.rate = 0; }\n' : ''}  const stiff = 420, drag = calm ? 2 * Math.sqrt(420) : 26;
   for (let i = 0; i < 4; i++) { tip.rate += ((want - tip.at) * stiff - tip.rate * drag) * dt / 4; tip.at += tip.rate * dt / 4; }
   if (Math.abs(want - tip.at) < 0.005 && Math.abs(tip.rate) < 0.005) { tip.at = want; tip.rate = 0; }
   draw();
@@ -234,16 +248,16 @@ function tick(now) {
   frame = visible && !settled ? requestAnimationFrame(tick) : 0;
 }
 const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(tick); } };
-const steer = (next) => { touring = false; target = clamp(next, REACH[0], REACH[1]); clearTimeout(idleTimer); idleTimer = setTimeout(() => { touring = !still.matches; clock = 0; run(); }, 3600); run(); };
+const steer = (next) => { touring = false; target = clamp(next, REACH[0], REACH[1]); clearTimeout(idleTimer); ${explained ? '' : 'idleTimer = setTimeout(() => { touring = !still.matches; clock = 0; run(); }, 3600); '}run(); };
 new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
 if (still.matches) touring = false;
-stage.addEventListener("pointermove", (event) => {
+${explained ? '' : `stage.addEventListener("pointermove", (event) => {
   const box = svg.getBoundingClientRect();
   const share = clamp(((event.clientX - box.left) / box.width - 0.25) / 0.5, 0, 1);
   steer(REACH[0] + share * (REACH[1] - REACH[0]));
 });
 stage.addEventListener("pointerleave", () => steer(target));
-stage.addEventListener("keydown", (event) => {
+`}stage.addEventListener("keydown", (event) => {
   const here = stops.reduce((best, stop, index) => (Math.abs(stop - target) < Math.abs(stops[best] - target) ? index : best), 0);
   let to = null;
   if (event.key === "ArrowRight" || event.key === "ArrowUp") to = Math.max(0, here - 1);
@@ -254,13 +268,18 @@ stage.addEventListener("keydown", (event) => {
   event.preventDefault();
   steer(stops[to]);
 });
-draw();
+${explained ? `for (const button of figure.querySelectorAll("[data-explain-stop]")) {
+  button.disabled = false;
+  button.addEventListener("click", () => steer(stops[Number(button.dataset.explainStop)]));
+}
+still.addEventListener("change", () => { if (still.matches) steer(target); });
+` : ''}draw();
 `;
 
-const body = k.plateHtml({
+let body = k.plateHtml({
   fig: "Fig 1",
   title: "Dial indicator",
-  hint: "Hover to slide the carriage",
+  hint: explained ? "Choose a block below" : "Hover to slide the carriage",
   readout: `block 1 · reads ${BLOCKS[0].toFixed(1)} px`,
   keys: [
     { mark: "lit", label: "Plunger and needle: what moves when the height changes" },
@@ -268,8 +287,31 @@ const body = k.plateHtml({
   ],
   caption:
     "A dial indicator on a surface plate. Slide the carriage and the plunger rides up or down onto the block beneath it; one turn of the needle is 20 px of travel, so every block reads its own height.",
-  body: `<div class="iso-stage" tabindex="0" role="slider" aria-label="Dial indicator: arrow keys move the carriage from block to block" aria-valuemin="0" aria-valuemax="18" aria-valuenow="18">${svg}</div>`,
+  body: `<div class="iso-stage" tabindex="0" role="slider"${explained ? ' aria-disabled="true"' : ''} aria-label="Dial indicator: arrow keys move the carriage from block to block" aria-valuemin="0" aria-valuemax="18" aria-valuenow="18">${svg}</div>`,
 });
 
-writeFileSync(join(HERE, theme === "light" ? "dial-indicator-light.html" : "dial-indicator.html"), k.pageHtml({ title: "Dial indicator", theme, body, script: kitScript() + live }));
-console.log("wrote", theme === "light" ? "dial-indicator-light.html" : "dial-indicator.html");
+if (explained) {
+  const initial = describeDial({ index: 0, reading: BLOCKS[0], settled: true, perTurn: PER_TURN });
+  const explanation = explanationHtml({ title: "Follow the measurement", initial, parts: [
+    { id: "carriage", label: "Carriage" },
+    { id: "plunger", label: "Plunger" },
+    { id: "needle", label: "Needle" },
+  ] });
+  const controls = `<div class="iso-explain-controls" role="group" aria-label="Choose a gauge block">${BLOCKS.map((height, index) => `<button type="button" data-explain-stop="${index}" disabled>Block ${index + 1}: ${height} px</button>`).join("")}</div>`;
+  const note = `<p class="iso-explain-note">Select a block, then hover a part or focus its name to find it in the picture. Values are drawing units (px), not a calibrated physical measurement. During a transition, the probe can touch a block edge before its centre reaches that block.</p><p class="iso-explain-status" data-explain-announcement role="status" aria-live="polite" aria-atomic="true"></p>`;
+  body = body.replace("</figcaption>", controls + explanation + note + "</figcaption>");
+  body = body.replace('class="iso-figure"', 'class="iso-figure iso-explained"');
+  body = `<style>${EXPLANATION_CSS}
+.iso-explain-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.iso-explain-controls button{padding:9px 12px;border:1px solid var(--anatomy-mid);background:var(--anatomy-card);color:var(--anatomy-strong);font:inherit;cursor:pointer}
+.iso-explain-controls button:focus-visible{outline:2px solid var(--anatomy-lit);outline-offset:3px}
+.iso-explain-controls button:disabled{cursor:default}
+.iso-explain-note{font-size:12px;line-height:1.6;color:var(--anatomy-text)}
+.iso-explain-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(min-width:900px){.iso-explained{display:grid;grid-template-columns:1.15fr 1fr;gap:28px;align-items:start}.iso-explained .iso-plate{position:sticky;top:20px}.iso-explained .iso-legend{margin-top:0}}
+</style>${body}`;
+}
+
+const name = `dial-indicator${explained ? "-explained" : ""}${theme === "light" ? "-light" : ""}.html`;
+writeFileSync(join(HERE, name), k.pageHtml({ title: explained ? "Dial indicator: linked explanation" : "Dial indicator", theme, width: explained ? 1100 : 650, body, script: kitScript() + (explained ? explainScript() : "") + live }));
+console.log("wrote", name);

@@ -48,6 +48,8 @@ Each framework-free example is one script that writes standalone pages next to i
 ```sh
 node examples/dial-indicator/build.mjs
 node examples/dial-indicator/build.mjs --light
+node examples/dial-indicator/build.mjs --explain
+node examples/dial-indicator/build.mjs --explain --light
 node examples/desk-computer/build.mjs
 node examples/desk-computer/build.mjs --light
 node examples/arcade-cabinet/build.mjs
@@ -75,6 +77,10 @@ Run the ones that match what you touched, and read every PNG they write: open it
 ```sh
 node --test scripts/drive.test.mjs
 ```
+
+For linked explanations, run `node --test scripts/explain.test.mjs scripts/dial-explanation.test.mjs`.
+Capture the whole `.iso-figure` in both themes at desktop and 390 px so the
+changing prose is included. Check intermediate as well as settled readings.
 
 **Geometry audit.** For figures with pipes, cables or round parts. It must end `audit passed`, with every failing line at 0.
 
